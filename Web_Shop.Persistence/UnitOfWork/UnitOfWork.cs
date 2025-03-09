@@ -45,6 +45,20 @@ namespace Web_Shop.Persistence.UOW
             return Task.CompletedTask;
         }
 
+        public async Task RollbackAsync()
+        {
+            var entries = _dbContext.ChangeTracker.Entries().ToList();
+            foreach (var entry in entries)
+            {
+                await entry.ReloadAsync();
+            }
+        }
+
+        public int SaveChanges()
+        {
+            return _dbContext.SaveChanges();
+        }
+
         public async Task<int> SaveChangesAsync(CancellationToken cancellationToken)
         {
             return await _dbContext.SaveChangesAsync(cancellationToken);
