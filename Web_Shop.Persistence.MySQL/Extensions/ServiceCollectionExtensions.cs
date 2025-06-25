@@ -14,7 +14,7 @@ namespace Web_Shop.Persistence.MySQL.Extensions
 
             services.AddDbContext<WwsishopContext>(options =>
             {
-                options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString));
+                options.UseMySQL(connectionString);
             });
         }
     }

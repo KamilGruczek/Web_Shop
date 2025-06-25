@@ -1,6 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
+using Web_Shop.Persistence.MySQL.Extensions;
 using WWSI_Shop.Persistence.MySQL.Model;
 
 namespace WWSI_Shop.Persistence.MySQL.Context;
@@ -40,7 +39,7 @@ public partial class WwsishopContext : DbContext
     {
         modelBuilder
             .UseCollation("utf8mb3_general_ci")
-            .HasCharSet("utf8mb3");
+            .HasCharSets("utf8mb3");
 
         modelBuilder.Entity<Address>(entity =>
         {

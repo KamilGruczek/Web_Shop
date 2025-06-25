@@ -1,8 +1,8 @@
-using Web_Shop.Persistence.Extensions;
 using Web_Shop.Application.Extensions;
 using Web_Shop.Application.Utils;
-using FluentValidation.AspNetCore;
+using Web_Shop.Persistence.Extensions;
 using Web_Shop.Persistence.UOW.Interfaces;
+using FluentValidation.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
