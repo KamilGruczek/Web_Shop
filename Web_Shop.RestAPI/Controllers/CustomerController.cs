@@ -1,111 +1,87 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using Sieve.Models;
 using Swashbuckle.AspNetCore.Annotations;
 using Web_Shop.Application.DTOs;
-using Web_Shop.Application.Services.Interfaces;
-using Web_Shop.Persistence.UOW.Interfaces;
-using Web_Shop.Application.Mappings;
-using Sieve.Models;
 using Web_Shop.Application.Helpers.PagedList;
-using WWSI_Shop.Persistence.MySQL.Model;
+using Web_Shop.Application.Mappings;
+using Web_Shop.Application.Services.Interfaces;
 
-namespace Web_Shop.RestAPI.Controllers
+namespace Web_Shop.RestAPI.Controllers;
+
+[ApiController]
+[Route("[controller]")]
+public class CustomerController(ICustomerService customerService) : BaseController
 {
-    [ApiController]
-    [Route("[controller]")]
-    public class CustomerController : ControllerBase
+    [HttpGet("{id}")]
+    [SwaggerOperation(OperationId = "GetCustomerById")]
+    public async Task<ActionResult<GetSingleCustomerDTO>> GetCustomer(ulong id)
     {
-        private readonly ICustomerService _customerService;
-        private readonly ILogger<CustomerController> _logger;
+        var result = await customerService.GetByIdAsync(id);
 
-        public CustomerController(ILogger<CustomerController> logger, ICustomerService customerService)
-        {
-            _customerService = customerService;
-            _logger = logger;
-        }
+        if (!result.IsSuccess)
+            return Problem(result, "Read error.");
 
-        [HttpGet("{id}")]
-        [SwaggerOperation(OperationId = "GetCustomerById")]
-        public async Task<ActionResult<GetSingleCustomerDTO>> GetCustomer(ulong id)
-        {
-            var result = await _customerService.GetByIdAsync(id);
+        return StatusCode((int)SuccessCode, result.Data!.MapGetSingleCustomerDTO());
+    }
 
-            if (!result.IsSuccess)
-            {
-                return Problem(statusCode: (int)result.StatusCode, title: "Read error.", detail: result.ErrorMessage);
-            }
+    [HttpGet("list")]
+    [SwaggerOperation(OperationId = "GetCustomers")]
+    public async Task<ActionResult<IPagedList<GetSingleCustomerDTO>>> GetCustomers([FromQuery] SieveModel paginationParams)
+    {
+        var result = await customerService.SearchAsync(paginationParams, resultEntity => resultEntity.MapGetSingleCustomerDTO());
 
-            return StatusCode((int)result.StatusCode, result.entity!.MapGetSingleCustomerDTO());
-        }
+        if (!result.IsSuccess)
+            return Problem(result, "Read error.");
 
-        [HttpGet("list")]
-        [SwaggerOperation(OperationId = "GetCustomers")]
-        public async Task<ActionResult<IPagedList<GetSingleCustomerDTO>>> GetCustomers([FromQuery] SieveModel paginationParams)
-        {
-            var result = await _customerService.SearchAsync(paginationParams, resultEntity => DomainToDtoMapper.MapGetSingleCustomerDTO(resultEntity));
+        return Ok(result.Data);
+    }
 
-            if (!result.IsSuccess)
-            {
-                return Problem(statusCode: (int)result.StatusCode, title: "Read error.", detail: result.ErrorMessage);
-            }
+    [HttpPost("add")]
+    [SwaggerOperation(OperationId = "AddCustomer")]
+    public async Task<ActionResult<GetSingleCustomerDTO>> AddCustomer([FromBody] AddUpdateCustomerDTO dto)
+    {
+        var result = await customerService.CreateNewCustomerAsync(dto);
 
-            return Ok(result.entityList);
-        }
+        if (!result.IsSuccess)
+            return Problem(result, "Add error.");
 
-        [HttpPost("add")]
-        [SwaggerOperation(OperationId = "AddCustomer")]
-        public async Task<ActionResult<GetSingleCustomerDTO>> AddCustomer([FromBody] AddUpdateCustomerDTO dto)
-        {
-            var result = await _customerService.CreateNewCustomerAsync(dto);
+        return CreatedAtAction(nameof(GetCustomer), new { id = result.Data!.IdCustomer }, result.Data.MapGetSingleCustomerDTO());
+    }
 
-            if (!result.IsSuccess)
-            {
-                return Problem(statusCode: (int)result.StatusCode, title: "Add error.", detail: result.ErrorMessage);
-            }
+    [HttpPut("update/{id}")]
+    [SwaggerOperation(OperationId = "UpdateCustomer")]
+    public async Task<ActionResult<GetSingleCustomerDTO>> UpdateCustomer(ulong id, [FromBody] AddUpdateCustomerDTO dto)
+    {
+        var result = await customerService.UpdateExistingCustomerAsync(dto, id);
 
-            return CreatedAtAction(nameof(GetCustomer), new { id = result.entity.IdCustomer }, result.entity.MapGetSingleCustomerDTO());
-        }
+        if (!result.IsSuccess)
+            return Problem(result, "Update error.");
 
-        [HttpPut("update/{id}")]
-        [SwaggerOperation(OperationId = "UpdateCustomer")]
-        public async Task<ActionResult<GetSingleCustomerDTO>> UpdateCustomer(ulong id, [FromBody] AddUpdateCustomerDTO dto)
-        {
-            var result = await _customerService.UpdateExistingCustomerAsync(dto, id);
+        return StatusCode((int)SuccessCode, result.Data!.MapGetSingleCustomerDTO());
+    }
 
-            if (!result.IsSuccess)
-            {
-                return Problem(statusCode: (int)result.StatusCode, title: "Update error.", detail: result.ErrorMessage);
-            }
+    [HttpGet("verifyPassword/{email}/{password}")]
+    [SwaggerOperation(OperationId = "VerifyPasswordByEmail")]
+    public async Task<ActionResult<GetSingleCustomerDTO>> VerifyPasswordByEmail(string email, string password)
+    {
+        var result = await customerService.VerifyPasswordByEmail(email, password);
 
-            return StatusCode((int)result.StatusCode, result.entity.MapGetSingleCustomerDTO());
-        }
+        if (!result.IsSuccess)
+            return Problem(result, "Read error.");
+        ;
 
-        [HttpGet("verifyPassword/{email}/{password}")]
-        [SwaggerOperation(OperationId = "VerifyPasswordByEmail")]
-        public async Task<ActionResult<GetSingleCustomerDTO>> VerifyPasswordByEmail(string email, string password)
-        {
-            var result = await _customerService.VerifyPasswordByEmail(email, password);
+        return StatusCode((int)SuccessCode, result.Data!.MapGetSingleCustomerDTO());
+    }
 
-            if (!result.IsSuccess)
-            {
-                return Problem(statusCode: (int)result.StatusCode, title: "Read error.", detail: result.ErrorMessage);
-            }
+    [HttpDelete("{id}")]
+    [SwaggerOperation(OperationId = "DeleteCustomer")]
+    public async Task<IActionResult> DeleteCustomer(ulong id)
+    {
+        var result = await customerService.DeleteAndSaveAsync(id);
 
-            return StatusCode((int)result.StatusCode, result.entity.MapGetSingleCustomerDTO());
-        }
+        if (!result.IsSuccess)
+            return Problem(result, "Delete error.");
 
-        [HttpDelete("{id}")]
-        [SwaggerOperation(OperationId = "DeleteCustomer")]
-        public async Task<IActionResult> DeleteCustomer(ulong id)
-        {
-            var result = await _customerService.DeleteAndSaveAsync(id);
-
-            if (!result.IsSuccess)
-            {
-                return Problem(statusCode: (int)result.StatusCode, title: "Delete error.", detail: result.ErrorMessage);
-            }
-
-            return NoContent();
-        }
+        return NoContent();
     }
 }

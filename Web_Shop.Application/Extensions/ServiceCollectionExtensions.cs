@@ -10,23 +10,21 @@ using Web_Shop.Application.Services;
 using Web_Shop.Application.Services.Interfaces;
 using Web_Shop.Application.Validation;
 
-namespace Web_Shop.Application.Extensions
-{
-    public static class ServiceCollectionExtensions
-    {
-        public static void AddApplicationLayer(this IServiceCollection services, IConfiguration configuration)
-        {
-            services.Configure<SieveOptions>(sieveOptions =>
-            {
-                configuration.GetSection("Sieve").Bind(sieveOptions);
-            });
-            services
-                .AddScoped<ISieveCustomSortMethods, SieveCustomSortMethods>()
-                .AddScoped<ISieveCustomFilterMethods, SieveCustomFilterMethods>()
-                .AddScoped<ISieveProcessor, ApplicationSieveProcessor>()
-                .AddScoped(typeof(ICustomerService), typeof(CustomerService));
+namespace Web_Shop.Application.Extensions;
 
-            services.AddScoped<IValidator<AddUpdateCustomerDTO>, AddUpdateCustomerDTOValidator>();
-        }
+public static class ServiceCollectionExtensions
+{
+    public static void AddApplicationLayer(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<SieveOptions>(sieveOptions => { configuration.GetSection("Sieve").Bind(sieveOptions); });
+        services
+            .AddScoped<ISieveCustomSortMethods, SieveCustomSortMethods>()
+            .AddScoped<ISieveCustomFilterMethods, SieveCustomFilterMethods>()
+            .AddScoped<ISieveProcessor, ApplicationSieveProcessor>()
+            .AddScoped<IWrapperService, WrapperService>()
+            .AddScoped<ILogService, LogService>()
+            .AddScoped<ICustomerService, CustomerService>();
+
+        services.AddScoped<IValidator<AddUpdateCustomerDTO>, AddUpdateCustomerDTOValidator>();
     }
 }

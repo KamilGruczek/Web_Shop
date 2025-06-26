@@ -1,203 +1,148 @@
-﻿using System.Diagnostics;
-using System;
-using System.Net;
-using System.Xml.Linq;
-using Web_Shop.Application.Services.Interfaces;
-using Microsoft.Extensions.Logging;
-using Web_Shop.Persistence.UOW.Interfaces;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Sieve.Models;
 using Sieve.Services;
-using Microsoft.EntityFrameworkCore;
-using Web_Shop.Application.DTOs;
-using Web_Shop.Application.Helpers.PagedList;
-using WWSI_Shop.Persistence.MySQL.Model;
+using Web_Shop.Application.Common;
 using Web_Shop.Application.Extensions;
+using Web_Shop.Application.Helpers.PagedList;
+using Web_Shop.Application.Services.Interfaces;
+using Web_Shop.Persistence.UOW.Interfaces;
 
-namespace Web_Shop.Application.Services
+namespace Web_Shop.Application.Services;
+
+public class BaseService<T>(IWrapperService wrapperService, ISieveProcessor sieveProcessor, IOptions<SieveOptions> sieveOptions, IUnitOfWork unitOfWork) : IBaseService<T> where T : class
 {
+    private bool _tracking = true;
 
-    public class BaseService<T> : IBaseService<T> where T : class
+    public IBaseService<T> WithTracking()
     {
-        private readonly ILogger<T> _logger;
+        _tracking = true;
+        return this;
+    }
 
-        protected readonly IUnitOfWork _unitOfWork;
-        protected readonly ISieveProcessor _sieveProcessor;
-        protected readonly IOptions<SieveOptions> _sieveOptions;
+    public IBaseService<T> WithoutTracking()
+    {
+        _tracking = false;
+        return this;
+    }
 
-        private bool _tracking = true;
-
-        public BaseService(ILogger<T> logger,
-                           ISieveProcessor sieveProcessor,
-                           IOptions<SieveOptions> sieveOptions,
-                           IUnitOfWork unitOfWork)
+    public async Task<ServiceResponse<T>> GetByIdAsync(params object?[]? id)
+    {
+        return await wrapperService.ExecuteMethodAsync(async () =>
         {
-            _logger = logger;
-            _unitOfWork = unitOfWork;
-            _sieveProcessor = sieveProcessor;
-            _sieveOptions = sieveOptions;
-        }
+            var result = _tracking
+                ? await unitOfWork.Repository<T>().GetByIdAsync(id)
+                : await unitOfWork.Repository<T>().WithoutTracking().GetByIdAsync(id);
 
-        public IBaseService<T> WithTracking()
+            if (result == null) return new ServiceResponse<T>(false, "Object not found in database.");
+
+            return new ServiceResponse<T>(result);
+        });
+    }
+
+    public async Task<ServiceResponse<IPagedList<TOut>>> SearchAsync<TOut>(SieveModel paginationParams,
+        Func<T, TOut> formatterCallback)
+    {
+        return await wrapperService.ExecuteMethodAsync(async () =>
         {
-            _tracking = true;
-            return this;
-        }
+            var query = unitOfWork.Repository<T>().Entities.AsNoTracking();
 
-        public IBaseService<T> WithoutTracking()
+            var result = await query.ToPagedListAsync(sieveProcessor,
+                sieveOptions,
+                paginationParams,
+                formatterCallback);
+
+            return new ServiceResponse<IPagedList<TOut>>(result);
+        });
+    }
+
+    public async Task<ServiceResponse<T>> AddAsync(T entity)
+    {
+        return await wrapperService.ExecuteMethodAsync(async () =>
         {
-            _tracking = false;
-            return this;
-        }
+            var result = await unitOfWork.Repository<T>().AddAsync(entity);
 
-        public async Task<(bool IsSuccess, T? entity, HttpStatusCode StatusCode, string ErrorMessage)> GetByIdAsync(params object?[]? id)
+            return new ServiceResponse<T>(result);
+        });
+    }
+
+    public async Task<ServiceResponse<T>> AddAndSaveAsync(T entity)
+    {
+        return await wrapperService.ExecuteMethodAsync(async () =>
         {
-            try
-            {
-                var result = _tracking
-                    ? await _unitOfWork.Repository<T>().GetByIdAsync(id)
-                    : await _unitOfWork.Repository<T>().WithoutTracking().GetByIdAsync(id);
+            var result = await unitOfWork.Repository<T>().AddAsync(entity);
+            await SaveChangesAsync(CancellationToken.None);
 
-                if (result == null)
-                {
-                    return (false, default(T), HttpStatusCode.NotFound, "Object not found in database.");
-                }
+            return new ServiceResponse<T>(result);
+        });
+    }
 
-                return (true, result, HttpStatusCode.OK, string.Empty);
-            }
-            catch (Exception ex)
-            {
-                return LogError(ex.Message);
-            }
-        }
-
-        public async Task<(bool IsSuccess, IPagedList<TOut>? entityList, HttpStatusCode StatusCode, string ErrorMessage)> SearchAsync<TOut>(SieveModel paginationParams, Func<T, TOut> formatterCallback)
+    public async Task<ServiceResponse<T>> UpdateAndSaveAsync(T entity, params object?[]? id)
+    {
+        return await wrapperService.ExecuteMethodAsync(async () =>
         {
-            try
-            {
-                var query = _unitOfWork.Repository<T>().Entities.AsNoTracking();
+            if (id == null) return new ServiceResponse<T>(false, "Object ID cannot be null or empty.");
 
-                var result = await query.ToPagedListAsync(_sieveProcessor,
-                                                          _sieveOptions,
-                                                          paginationParams,
-                                                          formatterCallback);
+            if (!await unitOfWork.Repository<T>().Exists(id))
+                return new ServiceResponse<T>(false,
+                    "Object " + typeof(T) + " with ID " + id[0] + " does not exists in database.");
 
-                return (true, result, HttpStatusCode.OK, String.Empty);
-            }
-            catch (Exception ex)
-            {
-                var error = LogError(ex.Message);
+            var result = await unitOfWork.Repository<T>().UpdateAsync(entity, id);
+            await SaveChangesAsync(CancellationToken.None);
 
-                return (false, default, error.StatusCode, error.ErrorMessage);
-            }
-        }
+            return new ServiceResponse<T>(result);
+        });
+    }
 
-        public async Task<(bool IsSuccess, T? entity, HttpStatusCode StatusCode, string ErrorMessage)> AddAsync(T entity)
+    public async Task<ServiceResponse> DeleteAsync(params object?[]? id)
+    {
+        return await wrapperService.ExecuteMethodAsync(async () =>
         {
-            try
-            {
-                var result = await _unitOfWork.Repository<T>().AddAsync(entity);
+            var entity = await unitOfWork.Repository<T>().GetByIdAsync(id);
 
-                return (true, result, HttpStatusCode.OK, string.Empty);
-            }
-            catch (Exception ex)
-            {
-                return LogError(ex.Message);
-            }
-        }
+            if (entity == null)
+                return new ServiceResponse(false, "Object not found.");
 
-        public async Task<(bool IsSuccess, T? entity, HttpStatusCode StatusCode, string ErrorMessage)> AddAndSaveAsync(T entity)
+            await unitOfWork.Repository<T>().DeleteAsync(entity);
+
+            return new ServiceResponse(true, "Object deleted successfully.");
+        });
+    }
+
+    public async Task<ServiceResponse<T>> DeleteAndSaveAsync(params object?[]? id)
+    {
+        return await wrapperService.ExecuteMethodAsync(async () =>
         {
-            try
-            {
-                var result = await _unitOfWork.Repository<T>().AddAsync(entity);
-                await SaveChangesAsync(CancellationToken.None);
+            if (id == null) return new ServiceResponse<T>(false, "Object ID cannot be null or empty.");
 
-                return (true, result, HttpStatusCode.OK, string.Empty);
-            }
-            catch (Exception ex)
-            {
-                return LogError(ex.Message);
-            }
-        }
+            if (!await unitOfWork.Repository<T>().Exists(id))
+                return new ServiceResponse<T>(false,
+                    "Object " + typeof(T) + " with ID " + id[0] + " does not exists in database.");
 
-        public async Task<T> UpdateAsync(T entity, params object?[]? id)
+            await DeleteAsync(id);
+            await SaveChangesAsync(CancellationToken.None);
+
+            return new ServiceResponse<T>(true, "Object deleted successfully.");
+        });
+    }
+
+    public async Task<ServiceResponse<int>> SaveChangesAsync(CancellationToken cancellationToken)
+    {
+        return await wrapperService.ExecuteMethodAsync(async () =>
         {
-            return await _unitOfWork.Repository<T>().UpdateAsync(entity, id);
-        }
+            var savedChangesCount = await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        public async Task<(bool IsSuccess, T? entity, HttpStatusCode StatusCode, string ErrorMessage)> UpdateAndSaveAsync(T entity, params object?[]? id)
+            return new ServiceResponse<int>(savedChangesCount);
+        });
+    }
+
+    public async Task<ServiceResponse<T>> UpdateAsync(T entity, params object?[]? id)
+    {
+        return await wrapperService.ExecuteMethodAsync(async () =>
         {
-            if (id == null)
-            {
-                return (false, default(T), HttpStatusCode.BadRequest, "Object ID cannot be null or empty.");
-            }
+            var updatedEntity = await unitOfWork.Repository<T>().UpdateAsync(entity, id);
 
-            try
-            {
-                if (!await _unitOfWork.Repository<T>().Exists(id))
-                {
-                    return (false, default(T), HttpStatusCode.NotFound, "Object " + typeof(T) + " with ID " + id[0] + " does not exists in database.");
-                }
-
-                var result = await _unitOfWork.Repository<T>().UpdateAsync(entity, id);
-                await SaveChangesAsync(CancellationToken.None);
-
-                return (true, result, HttpStatusCode.OK, string.Empty);
-            }
-            catch (Exception ex)
-            {
-                return LogError(ex.Message);
-            }
-        }
-
-        public async Task DeleteAsync(params object?[]? id)
-        {
-            var entity = await _unitOfWork.Repository<T>().GetByIdAsync(id);
-
-            await _unitOfWork.Repository<T>().DeleteAsync(entity);
-
-            return;
-        }
-
-        public async Task<(bool IsSuccess, T? entity, HttpStatusCode StatusCode, string ErrorMessage)> DeleteAndSaveAsync(params object?[]? id)
-        {
-            if (id == null)
-            {
-                return (false, default(T), HttpStatusCode.BadRequest, "Object ID cannot be null or empty.");
-            }
-
-            try
-            {
-                if (!await _unitOfWork.Repository<T>().Exists(id))
-                {
-                    return (false, default(T), HttpStatusCode.NotFound, "Object " + typeof(T) + " with ID " + id[0] + " does not exists in database.");
-                }
-
-                await DeleteAsync(id);
-                await SaveChangesAsync(CancellationToken.None);
-
-                return (true, default(T), HttpStatusCode.NoContent, string.Empty);
-            }
-            catch (Exception ex)
-            {
-                return LogError(ex.Message);
-            }
-        }
-
-        public async Task<int> SaveChangesAsync(CancellationToken cancellationToken)
-        {
-            return await _unitOfWork.SaveChangesAsync(cancellationToken);
-        }
-
-        protected (bool IsSuccess, T? entity, HttpStatusCode StatusCode, string ErrorMessage) LogError(string errorMessage)
-        {
-            var traceId = Activity.Current?.TraceId;
-            var spanId = Activity.Current?.SpanId;
-
-            _logger.LogInformation("Exception: " + errorMessage + " TraceID: " + traceId + "-" + spanId);
-
-            return (false, default(T), HttpStatusCode.InternalServerError, "Internal server error.");
-        }
+            return new ServiceResponse<T>(updatedEntity);
+        });
     }
 }

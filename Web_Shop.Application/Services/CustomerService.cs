@@ -1,15 +1,8 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Sieve.Models;
 using Sieve.Services;
-using System;
-using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
-using System.Linq;
-using System.Net;
-using System.Text;
-using System.Threading.Tasks;
+using Web_Shop.Application.Common;
 using Web_Shop.Application.DTOs;
 using Web_Shop.Application.Extensions;
 using Web_Shop.Application.Helpers.PagedList;
@@ -19,116 +12,80 @@ using Web_Shop.Persistence.UOW.Interfaces;
 using WWSI_Shop.Persistence.MySQL.Model;
 using BC = BCrypt.Net.BCrypt;
 
-namespace Web_Shop.Application.Services
+namespace Web_Shop.Application.Services;
+
+public class CustomerService(IWrapperService wrapperService, ISieveProcessor sieveProcessor, IOptions<SieveOptions> sieveOptions, IUnitOfWork unitOfWork) : BaseService<Customer>(wrapperService, sieveProcessor, sieveOptions, unitOfWork), ICustomerService
 {
-    public class CustomerService : BaseService<Customer>, ICustomerService
+    public async Task<ServiceResponse<Customer>> CreateNewCustomerAsync(AddUpdateCustomerDTO dto)
     {
-        public CustomerService(ILogger<Customer> logger,
-                                  ISieveProcessor sieveProcessor,
-                                  IOptions<SieveOptions> sieveOptions,
-                                  IUnitOfWork unitOfWork)
-            : base(logger, sieveProcessor, sieveOptions, unitOfWork)
+        return await wrapperService.ExecuteMethodAsync(async () =>
         {
+            if (await unitOfWork.CustomerRepository.EmailExistsAsync(dto.Email))
+                return new ServiceResponse<Customer>(false, "Email: " + dto.Email + " already registered.");
 
-        }
+            var newEntity = dto.MapCustomer();
+            //newEntity.CreatedAt = DateTime.UtcNow;
+            //newEntity.UpdatedAt = newEntity.CreatedAt;
 
-        public async Task<(bool IsSuccess, Customer? entity, HttpStatusCode StatusCode, string ErrorMessage)> CreateNewCustomerAsync(AddUpdateCustomerDTO dto)
+            var result = await AddAndSaveAsync(newEntity);
+            if (!result.IsSuccess)
+                return new ServiceResponse<Customer>(false, result.Message ?? "Failed to create new customer.");
+
+            return new ServiceResponse<Customer>(result.Data);
+        });
+    }
+
+    public async Task<ServiceResponse<Customer>> UpdateExistingCustomerAsync(AddUpdateCustomerDTO dto, ulong id)
+    {
+        return await wrapperService.ExecuteMethodAsync(async () =>
         {
-            try
-            {
-                if (await _unitOfWork.CustomerRepository.EmailExistsAsync(dto.Email))
-                {
-                    return (false, default(Customer), HttpStatusCode.BadRequest, "Email: " + dto.Email + " already registered.");
-                }
+            var existingEntityResult = await WithoutTracking().GetByIdAsync(id);
 
-                var newEntity = dto.MapCustomer();
-                //newEntity.CreatedAt = DateTime.UtcNow;
-                //newEntity.UpdatedAt = newEntity.CreatedAt;
+            if (!existingEntityResult.IsSuccess)
+                return existingEntityResult;
 
-                var result = await AddAndSaveAsync(newEntity);
-                return (true, result.entity, HttpStatusCode.OK, string.Empty);
-            }
-            catch (Exception ex)
-            {
-                return LogError(ex.Message);
-            }
-        }
+            if (!await unitOfWork.CustomerRepository.IsEmailEditAllowedAsync(dto.Email, id))
+                return new ServiceResponse<Customer>(false, "Email: " + dto.Email + " already registered.");
 
-        public async Task<(bool IsSuccess, Customer? entity, HttpStatusCode StatusCode, string ErrorMessage)> UpdateExistingCustomerAsync(AddUpdateCustomerDTO dto, ulong id)
+            var domainEntity = dto.MapCustomer();
+
+            domainEntity.IdCustomer = id;
+            if (!dto.IsPasswordUpdate)
+                domainEntity.PasswordHash = existingEntityResult!.Data!.PasswordHash;
+
+            //domainEntity.CreatedAt = existingEntity.CreatedAt;
+            //domainEntity.UpdatedAt = DateTime.UtcNow;
+            //domainCustomer.UpdatedAt = DateTime.UtcNow.ConvertFromUtc(TimeZones.CentralEuropeanTimeZone);
+            return await UpdateAndSaveAsync(domainEntity, id);
+        });
+    }
+
+    public async Task<ServiceResponse<Customer>> VerifyPasswordByEmail(string email, string password)
+    {
+        return await wrapperService.ExecuteMethodAsync(async () =>
         {
-            try
-            {
-                var existingEntityResult = await WithoutTracking().GetByIdAsync(id);
+            var existingEntity = await unitOfWork.CustomerRepository.GetByEmailAsync(email);
 
-                if (!existingEntityResult.IsSuccess)
-                {
-                    return existingEntityResult;
-                }
+            if (existingEntity == null ||
+                !BC.Verify(password, existingEntity.PasswordHash))
+                return new ServiceResponse<Customer>(false, "Invalid email or password.");
 
-                if (!await _unitOfWork.CustomerRepository.IsEmailEditAllowedAsync(dto.Email, id))
-                {
-                    return (false, default(Customer), HttpStatusCode.BadRequest, "Email: " + dto.Email + " already registered.");
-                }
+            return new ServiceResponse<Customer>(existingEntity);
+        });
+    }
 
-                var domainEntity = dto.MapCustomer();
-
-                domainEntity.IdCustomer = id;
-                if (!dto.IsPasswordUpdate)
-                {
-                    domainEntity.PasswordHash = existingEntityResult!.entity!.PasswordHash;
-                }
-
-                //domainEntity.CreatedAt = existingEntity.CreatedAt;
-                //domainEntity.UpdatedAt = DateTime.UtcNow;
-                //domainCustomer.UpdatedAt = DateTime.UtcNow.ConvertFromUtc(TimeZones.CentralEuropeanTimeZone);
-                return await UpdateAndSaveAsync(domainEntity, id);
-            }
-            catch (Exception ex)
-            {
-                return LogError(ex.Message);
-            }
-        }
-
-        /*
-        public async Task<(bool IsSuccess, IPagedList<Customer, GetSingleCustomerDTO>? entityList, HttpStatusCode StatusCode, string ErrorMessage)> SearchCustomersAsync(SieveModel paginationParams)
+    public async Task<ServiceResponse<IPagedList<Customer, GetSingleCustomerDTO>>> SearchCustomersAsync(SieveModel paginationParams)
+    {
+        return await wrapperService.ExecuteMethodAsync(async () =>
         {
-            try
-            {
-                var query = _unitOfWork.CustomerRepository.Entities.AsNoTracking();
+            var query = unitOfWork.CustomerRepository.Entities.AsNoTracking();
 
-                var result = await query.ToPagedListAsync(_sieveProcessor,
-                                                          _sieveOptions,
-                                                          paginationParams,
-                                                          formatterCallback => DomainToDtoMapper.MapGetSingleCustomerDTO(formatterCallback));
+            var result = await query.ToPagedListAsync(sieveProcessor,
+                sieveOptions,
+                paginationParams,
+                formatterCallback => formatterCallback.MapGetSingleCustomerDTO());
 
-                return (true, result, HttpStatusCode.OK, String.Empty);
-            }
-            catch (Exception ex)
-            {
-                var error = LogError(ex.Message);
-
-                return (false, default, error.StatusCode, error.ErrorMessage);
-            }
-        }
-        */
-
-        public async Task<(bool IsSuccess, Customer? entity, HttpStatusCode StatusCode, string ErrorMessage)> VerifyPasswordByEmail(string email, string password)
-        {
-            try
-            {
-                var existingEntity = await _unitOfWork.CustomerRepository.GetByEmailAsync(email);
-
-                if (existingEntity == null || !BC.Verify(password, existingEntity.PasswordHash))
-                {
-                    return (false, default(Customer), HttpStatusCode.Unauthorized, "Invalid email or password.");
-                }
-
-                return (true, existingEntity, HttpStatusCode.OK, string.Empty);
-            }
-            catch (Exception ex)
-            {
-                return LogError(ex.Message);
-            }
-        }
+            return new ServiceResponse<IPagedList<Customer, GetSingleCustomerDTO>>(result);
+        });
     }
 }
