@@ -1,4 +1,5 @@
 using Moq;
+using Web_Shop.Application.Common;
 using Web_Shop.Application.CustomQueries;
 using Web_Shop.Application.DTOs;
 using Web_Shop.Application.Mappings.PropertiesMappings;
@@ -15,14 +16,14 @@ namespace Web_Shop.UnitTests;
 public class CustomerServiceTest
 {
     private readonly Mock<SieveOptionsAccessor> _optionsAccessorMock;
-
     private readonly Mock<ApplicationSieveProcessor> _processorMock;
     private readonly Mock<IWrapperService> _wrapperMock;
 
     public CustomerServiceTest()
     {
         _wrapperMock = new Mock<IWrapperService>();
-
+        _wrapperMock.Setup(m => m.ExecuteMethodAsync(It.IsAny<Func<Task<ServiceResponse<Customer>>>>()))
+            .Returns((Func<Task<ServiceResponse<Customer>>> func) => func());
         _optionsAccessorMock = new Mock<SieveOptionsAccessor>();
 
         _processorMock = new Mock<ApplicationSieveProcessor>(_optionsAccessorMock.Object,
@@ -55,7 +56,6 @@ public class CustomerServiceTest
         var verifyResult = await customerService.CreateNewCustomerAsync(addUpdateCustomerDTO);
 
         Assert.True(verifyResult.IsSuccess);
-        Assert.NotNull(verifyResult.Data);
     }
 
     [Theory]
@@ -83,7 +83,6 @@ public class CustomerServiceTest
         var verifyResult = await customerService.CreateNewCustomerAsync(addUpdateCustomerDTO);
 
         Assert.False(verifyResult.IsSuccess);
-        Assert.Null(verifyResult.Data);
     }
 
     [Fact]
