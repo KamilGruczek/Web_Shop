@@ -24,8 +24,6 @@ public class CustomerService(IWrapperService wrapperService, ISieveProcessor sie
                 return new ServiceResponse<Customer>(false, "Email: " + dto.Email + " already registered.");
 
             var newEntity = dto.MapCustomer();
-            //newEntity.CreatedAt = DateTime.UtcNow;
-            //newEntity.UpdatedAt = newEntity.CreatedAt;
 
             var result = await AddAndSaveAsync(newEntity);
             if (!result.IsSuccess)
@@ -53,9 +51,6 @@ public class CustomerService(IWrapperService wrapperService, ISieveProcessor sie
             if (!dto.IsPasswordUpdate)
                 domainEntity.PasswordHash = existingEntityResult!.Data!.PasswordHash;
 
-            //domainEntity.CreatedAt = existingEntity.CreatedAt;
-            //domainEntity.UpdatedAt = DateTime.UtcNow;
-            //domainCustomer.UpdatedAt = DateTime.UtcNow.ConvertFromUtc(TimeZones.CentralEuropeanTimeZone);
             return await UpdateAndSaveAsync(domainEntity, id);
         });
     }

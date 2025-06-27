@@ -1,18 +1,17 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Web_Shop.Persistence.MySQL.Extensions;
-using Web_Shop.Persistence.UOW.Interfaces;
 using Web_Shop.Persistence.UOW;
+using Web_Shop.Persistence.UOW.Interfaces;
 
-namespace Web_Shop.Persistence.Extensions
+namespace Web_Shop.Persistence.Extensions;
+
+public static class ServiceCollectionExtensions
 {
-    public static class ServiceCollectionExtensions
+    public static void AddPersistenceLayer(this IServiceCollection services, IConfiguration configuration)
     {
-        public static void AddPersistenceLayer(this IServiceCollection services, IConfiguration configuration)
-        {
-            services.AddMySQLDbContext(configuration);
+        services.AddMySQLDbContext(configuration);
 
-            services.AddScoped(typeof(IUnitOfWork), typeof(UnitOfWork));
-        }
+        services.AddScoped<IUnitOfWork, UnitOfWork>();
     }
 }
