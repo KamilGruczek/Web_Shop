@@ -27,5 +27,6 @@ public static class ServiceCollectionExtensions
             .AddScoped<IProductService, ProductService>();
 
         services.AddScoped<IValidator<AddUpdateCustomerDTO>, AddUpdateCustomerDTOValidator>();
+        services.AddScoped<IValidator<AddUpdateProductDTO>, AddUpdateProductDTOValidator>();
     }
 }
