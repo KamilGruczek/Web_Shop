@@ -1,5 +1,5 @@
+using System.Diagnostics;
 using System.Text;
-using Microsoft.EntityFrameworkCore;
 using Web_Shop.Application.Common;
 using Web_Shop.Application.Extensions;
 using Web_Shop.Application.Services.Interfaces;
@@ -11,144 +11,6 @@ public class WrapperService(ILogService logService, WwsishopContext dbContext) :
 {
     private const string INTERNAL_SERVER_ERROR = "Internal Server Error";
 
-    private string GetStackTrace(Exception exception, StringBuilder? sb = null)
-    {
-        if (sb == null)
-            sb = new StringBuilder();
-
-        sb.AppendLine(exception.Message);
-        sb.AppendLine("Stack Trace:");
-        sb.AppendLine(exception.StackTrace);
-
-        if (exception.InnerException != null)
-        {
-            sb.AppendLine("Inner Exception:");
-            GetStackTrace(exception.InnerException, sb);
-        }
-
-        return sb.ToString();
-    }
-
-    #region ExecuteMethod
-
-    #region WithDbContext
-
-    public async Task<ServiceResponse> ExecuteMethodAsync(Func<DbContext, Task<ServiceResponse>> action)
-    {
-        try
-        {
-            var actionResult = await action(dbContext);
-
-            return await ReturnResultAsync(actionResult);
-        }
-        catch (Exception ex)
-        {
-            await logService.AddErrorLogAsync(ex.Message, GetStackTrace(ex));
-
-            return new ServiceResponse(false, INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    public async Task<ServiceResponse<T>> ExecuteMethodAsync<T>(Func<DbContext, Task<T>> action)
-    {
-        try
-        {
-            var actionResult = await action(dbContext);
-
-            return await ReturnResultAsync(actionResult);
-        }
-        catch (Exception ex)
-        {
-            await logService.AddErrorLogAsync(ex.Message, GetStackTrace(ex));
-
-            return new ServiceResponse<T>(false, INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    public async Task<ServiceResponse<T>> ExecuteMethodAsync<T>(Func<DbContext, T> action)
-    {
-        try
-        {
-            var actionResult = action(dbContext);
-
-            return await ReturnResultAsync(actionResult);
-        }
-        catch (Exception ex)
-        {
-            await logService.AddErrorLogAsync(ex.Message, GetStackTrace(ex));
-
-            return new ServiceResponse<T>(false, INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    public async Task<ServiceResponse<T>> ExecuteMethodAsync<T>(Func<DbContext, Task<ServiceResponse<T>>> action)
-    {
-        try
-        {
-            var actionResult = await action(dbContext);
-
-            return await ReturnResultAsync(actionResult);
-        }
-        catch (Exception ex)
-        {
-            await logService.AddErrorLogAsync(ex.Message, GetStackTrace(ex));
-
-            return new ServiceResponse<T>(false, INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    public async Task<ServiceResponse<T>> ExecuteMethodAsync<T>(Func<DbContext, ServiceResponse<T>> action)
-    {
-        try
-        {
-            var actionResult = action(dbContext);
-
-            return await ReturnResultAsync(actionResult);
-        }
-        catch (Exception ex)
-        {
-            await logService.AddErrorLogAsync(ex.Message, GetStackTrace(ex));
-
-            return new ServiceResponse<T>(false, INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    #endregion
-
-    #region WithoutDbContext
-
-    public async Task<ServiceResponse<T>> ExecuteMethodAsync<T>(Func<Task<T>> action)
-    {
-        try
-        {
-            var actionResult = await action();
-
-            return await ReturnResultAsync(actionResult);
-        }
-        catch (Exception ex)
-        {
-            await logService.AddErrorLogAsync(ex.Message, GetStackTrace(ex));
-
-            return new ServiceResponse<T>(false, INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    public async Task<ServiceResponse<T>> ExecuteMethodAsync<T>(Func<T> action)
-    {
-        try
-        {
-            var actionResult = action();
-
-            return await ReturnResultAsync(actionResult);
-        }
-        catch (Exception ex)
-        {
-            await logService.AddErrorLogAsync(ex.Message, GetStackTrace(ex));
-
-            return new ServiceResponse<T>(false, INTERNAL_SERVER_ERROR);
-        }
-    }
-
     public async Task<ServiceResponse<T>> ExecuteMethodAsync<T>(Func<Task<ServiceResponse<T>>> action)
     {
         try
@@ -159,9 +21,13 @@ public class WrapperService(ILogService logService, WwsishopContext dbContext) :
         }
         catch (Exception ex)
         {
-            await logService.AddErrorLogAsync(ex.Message, GetStackTrace(ex));
+            var traceId = Activity.Current?.TraceId;
+            var spanId = Activity.Current?.SpanId;
 
-            return new ServiceResponse<T>(false, INTERNAL_SERVER_ERROR);
+            var traceIdString = $"TraceID: {traceId}-{spanId}";
+            await logService.AddErrorLogAsync(ex.Message, GetStackTrace(ex, traceIdString));
+
+            return new ServiceResponse<T>(false, $"{traceIdString}{Environment.NewLine}Error: {INTERNAL_SERVER_ERROR}");
         }
     }
 
@@ -175,49 +41,36 @@ public class WrapperService(ILogService logService, WwsishopContext dbContext) :
         }
         catch (Exception ex)
         {
-            await logService.AddErrorLogAsync(ex.Message, GetStackTrace(ex));
+            var traceId = Activity.Current?.TraceId;
+            var spanId = Activity.Current?.SpanId;
 
-            return new ServiceResponse(false, INTERNAL_SERVER_ERROR);
+            var traceIdString = $"TraceID: {traceId}-{spanId}";
+            await logService.AddErrorLogAsync(ex.Message, GetStackTrace(ex, traceIdString));
+
+            return new ServiceResponse(false, $"{traceIdString}{Environment.NewLine}Error: {INTERNAL_SERVER_ERROR}");
         }
     }
 
-    public async Task<ServiceResponse> ExecuteMethodAsync(Func<ServiceResponse> action)
+    private string GetStackTrace(Exception exception, string? traceId, StringBuilder? sb = null)
     {
-        try
-        {
-            var actionResult = action();
+        if (sb == null)
+            sb = new StringBuilder();
 
-            return await ReturnResultAsync(actionResult);
-        }
-        catch (Exception ex)
-        {
-            await logService.AddErrorLogAsync(ex.Message, GetStackTrace(ex));
+        if (traceId.IsNotNull())
+            sb.AppendLine(traceId);
 
-            return new ServiceResponse(false, INTERNAL_SERVER_ERROR);
+        sb.AppendLine(exception.Message);
+        sb.AppendLine("Stack Trace:");
+        sb.AppendLine(exception.StackTrace);
+
+        if (exception.InnerException != null)
+        {
+            sb.AppendLine("Inner Exception:");
+            GetStackTrace(exception.InnerException, null, sb);
         }
+
+        return sb.ToString();
     }
-
-    public async Task<ServiceResponse<T>> ExecuteMethodAsync<T>(Func<ServiceResponse<T>> action)
-    {
-        try
-        {
-            var actionResult = action();
-
-            return await ReturnResultAsync(actionResult);
-        }
-        catch (Exception ex)
-        {
-            await logService.AddErrorLogAsync(ex.Message, GetStackTrace(ex));
-
-            return new ServiceResponse<T>(false, INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    #endregion
-
-    #endregion
-
-    #region ReturnResult
 
     private async Task<ServiceResponse<T>> ReturnResultAsync<T>(ServiceResponse<T>? serviceResponse)
     {
@@ -248,18 +101,6 @@ public class WrapperService(ILogService logService, WwsishopContext dbContext) :
         return new ServiceResponse<T>(false, serviceResponse.Message ?? string.Empty);
     }
 
-    private async Task<ServiceResponse<T>> ReturnResultAsync<T>(T? actionResult)
-    {
-        if (actionResult == null)
-        {
-            await logService.AddErrorLogAsync("Action Result is null", INTERNAL_SERVER_ERROR);
-
-            return new ServiceResponse<T>(false, INTERNAL_SERVER_ERROR);
-        }
-
-        return new ServiceResponse<T>(actionResult);
-    }
-
     private async Task<ServiceResponse> ReturnResultAsync(ServiceResponse? serviceResponse)
     {
         if (serviceResponse == null)
@@ -280,6 +121,4 @@ public class WrapperService(ILogService logService, WwsishopContext dbContext) :
 
         return serviceResponse;
     }
-
-    #endregion
 }

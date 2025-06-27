@@ -1,11 +1,8 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Sieve.Models;
 using Sieve.Services;
 using Web_Shop.Application.Common;
 using Web_Shop.Application.DTOs;
-using Web_Shop.Application.Extensions;
-using Web_Shop.Application.Helpers.PagedList;
 using Web_Shop.Application.Mappings;
 using Web_Shop.Application.Services.Interfaces;
 using Web_Shop.Persistence.UOW.Interfaces;
@@ -54,21 +51,6 @@ public class ProductService(IWrapperService wrapperService, ISieveProcessor siev
             domainEntity.IdProduct = productId;
 
             return await UpdateAndSaveAsync(domainEntity, productId);
-        });
-    }
-
-    public async Task<ServiceResponse<IPagedList<Product, GetSingleProductDTO>>> SearchProductsAsync(SieveModel paginationParams)
-    {
-        return await _wrapperService.ExecuteMethodAsync(async () =>
-        {
-            var query = _unitOfWork.ProductRepository.Entities.AsNoTracking();
-
-            var result = await query.ToPagedListAsync(_sieveProcessor,
-                _sieveOptions,
-                paginationParams,
-                formatterCallback => formatterCallback.MapGetSingleProductDTO());
-
-            return new ServiceResponse<IPagedList<Product, GetSingleProductDTO>>(result);
         });
     }
 }

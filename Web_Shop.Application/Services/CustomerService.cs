@@ -1,11 +1,8 @@
-﻿using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
+﻿using Microsoft.Extensions.Options;
 using Sieve.Models;
 using Sieve.Services;
 using Web_Shop.Application.Common;
 using Web_Shop.Application.DTOs;
-using Web_Shop.Application.Extensions;
-using Web_Shop.Application.Helpers.PagedList;
 using Web_Shop.Application.Mappings;
 using Web_Shop.Application.Services.Interfaces;
 using Web_Shop.Persistence.UOW.Interfaces;
@@ -66,21 +63,6 @@ public class CustomerService(IWrapperService wrapperService, ISieveProcessor sie
                 return new ServiceResponse<Customer>(false, "Invalid email or password.");
 
             return new ServiceResponse<Customer>(existingEntity);
-        });
-    }
-
-    public async Task<ServiceResponse<IPagedList<Customer, GetSingleCustomerDTO>>> SearchCustomersAsync(SieveModel paginationParams)
-    {
-        return await wrapperService.ExecuteMethodAsync(async () =>
-        {
-            var query = unitOfWork.CustomerRepository.Entities.AsNoTracking();
-
-            var result = await query.ToPagedListAsync(sieveProcessor,
-                sieveOptions,
-                paginationParams,
-                formatterCallback => formatterCallback.MapGetSingleCustomerDTO());
-
-            return new ServiceResponse<IPagedList<Customer, GetSingleCustomerDTO>>(result);
         });
     }
 }
