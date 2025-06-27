@@ -23,7 +23,8 @@ public static class ServiceCollectionExtensions
             .AddScoped<ISieveProcessor, ApplicationSieveProcessor>()
             .AddScoped<IWrapperService, WrapperService>()
             .AddScoped<ILogService, LogService>()
-            .AddScoped<ICustomerService, CustomerService>();
+            .AddScoped<ICustomerService, CustomerService>()
+            .AddScoped<IProductService, ProductService>();
 
         services.AddScoped<IValidator<AddUpdateCustomerDTO>, AddUpdateCustomerDTOValidator>();
     }
